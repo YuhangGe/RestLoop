@@ -1,0 +1,53 @@
+{
+  "name": "restnoti",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev -c scripts/vite.config.ts",
+    "build": "tsc && vite build -c scripts/vite.config.ts",
+    "preview": "vite preview -c scripts/vite.config.ts",
+    "test-cov-file": "pnpm test -- --coverage --collectCoverageFrom=src/vm/object.ts",
+    "lint-fix": "oxlint --type-aware --fix && biome format --fix",
+    "lint": "tsc --noEmit && oxlint --type-aware && biome format",
+    "lint-staged": "lint-staged",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,ts,tsx}": [
+      "oxlint --type-aware --fix",
+      "biome format --fix"
+    ]
+  },
+  "dependencies": {
+    "@ant-design/colors": "^8.0.0",
+    "@biomejs/biome": "^2.2.6",
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-autostart": "~2.5.0",
+    "@tauri-apps/plugin-os": "^2.3.1",
+    "@tauri-apps/plugin-store": "~2.4.0",
+    "jinge": "^4.1.7",
+    "jinge-antd": "file:..\\jinge-antd",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@iconify/json": "^2.2.398",
+    "@iconify/tailwind4": "^1.0.6",
+    "@tailwindcss/vite": "^4.1.15",
+    "@tauri-apps/cli": "^2.9.0",
+    "@types/bun": "^1.3.0",
+    "@types/node": "^24.9.1",
+    "husky": "^9.1.7",
+    "jinge-compiler": "^4.1.9",
+    "lint-staged": "^16.2.5",
+    "oxlint": "^1.23.0",
+    "oxlint-tsgolint": "^0.2.0",
+    "sass-embedded": "^1.93.2",
+    "tailwindcss": "^4.1.15",
+    "type-fest": "^5.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.11",
+    "vite-plugin-minipic": "^1.3.2",
+    "vite-tsconfig-paths": "^5.1.4"
+  }
+}

@@ -1217,7 +1217,7 @@ packages:
     resolution: {directory: ../jinge-antd, type: directory}
     peerDependencies:
       jinge: ^4.1.7
-      zod: ^4
+      zod: ^4.1.12
 
   jinge-compiler-core-linux-aarch64@4.1.9:
     resolution: {integrity: sha512-bZTrzPtQGSiWHM1z0RzpkHKfDPLH5jPShpjPZ7o19Mqq2KCrptAX0k7DH06PNNf/nnb6Fef+3XuM55DG6l7I+w==}

@@ -4262,7 +4262,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "restnoti"
+name = "restloop"
 version = "0.1.0"
 dependencies = [
  "display-info",
@@ -4275,6 +4275,8 @@ dependencies = [
  "tauri-plugin-os",
  "tauri-plugin-single-instance",
  "tauri-plugin-store",
+ "tokio",
+ "tokio-util",
  "winit",
 ]
 

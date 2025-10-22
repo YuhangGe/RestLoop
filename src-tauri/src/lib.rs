@@ -1,36 +1,19 @@
+mod constant;
 mod counter;
+mod settings;
+mod tray;
+mod window_counter;
+mod window_main;
+mod x;
 
-use std::thread;
+use tauri::Manager;
+use tauri::plugin::Builder;
+use tokio::sync;
+use winit::raw_window_handle::HasDisplayHandle;
 
-use tauri::{
-  menu::{Menu, MenuItem},
-  tray::TrayIconBuilder,
-  AppHandle, Manager, Runtime, WebviewWindowBuilder,
-};
-
-use crate::counter::show_counter_window;
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-  format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-const APP_TITLE: &'static str = "健康休息提醒器";
-
-fn open_main_window<R: Runtime>(app: &AppHandle<R>) {
-  if let Some(x) = app.get_webview_window("main") {
-    x.show().unwrap();
-    let _ = x.set_focus();
-  } else {
-    // let cfg = &app.config().app.windows[0];
-    let _ = WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("/index.html".into()))
-      .title(APP_TITLE)
-      .inner_size(800.0, 600.0)
-      .build()
-      .unwrap();
-  }
-}
+use crate::counter::Counter;
+use crate::settings::{setup_settings, tauri_load_settings};
+use crate::tray::setup_tray;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -41,6 +24,7 @@ pub fn run() {
       tauri_plugin_autostart::MacosLauncher::LaunchAgent,
       None,
     ))
+    .plugin()
     .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
       // let win = app.get_webview_window("main").expect("no main window");
       // win.show().unwrap();
@@ -51,40 +35,24 @@ pub fn run() {
       let _ = win.show();
       let _ = win.set_focus();
     }))
-    .invoke_handler(tauri::generate_handler![greet])
-    .setup(|_app| {
-      let quit_i = MenuItem::with_id(_app, "quit", "退出", true, None::<&str>).unwrap();
-      let menu = Menu::with_items(_app, &[&quit_i]).unwrap();
-      let _ = TrayIconBuilder::new()
-        .icon(_app.default_window_icon().unwrap().clone())
-        .menu(&menu)
-        .tooltip(APP_TITLE)
-        .show_menu_on_left_click(false)
-        .on_tray_icon_event(|ic, event| {
-          use tauri::tray::TrayIconEvent;
+    .invoke_handler(tauri::generate_handler![tauri_load_settings])
+    .setup(|app| {
+      setup_tray(app);
+      let settings = setup_settings(app);
+      let counter = Counter::new_state(settings.work_secs);
+      app.manage(counter.clone());
 
-          if let TrayIconEvent::Click { button, .. } = &event {
-            use tauri::tray::MouseButton;
-
-            if matches!(button, MouseButton::Left) {
-              open_main_window(ic.app_handle());
-            }
-          }
-        })
-        .on_menu_event(|app, event| match event.id.as_ref() {
-          "quit" => {
-            app.exit(0);
-          }
-          _ => {
-            println!("menu item {:?} not handled", event.id);
-          }
-        })
-        .build(_app)
+      tauri::async_runtime::spawn(async move {
+        // counter.lock().await.start().await;
+      });
+      let x = tauri::window::WindowBuilder::new(app, "xxx")
+        .title("xxx")
+        .build()
         .unwrap();
 
-      thread::spawn(|| {
-        show_counter_window();
-      });
+      x.show().unwrap();
+
+      let h = x.display_handle().unwrap();
 
       Ok(())
     })

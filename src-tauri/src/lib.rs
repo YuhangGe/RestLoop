@@ -1,25 +1,17 @@
-mod blocker;
+mod chinese_font;
 mod constant;
-mod counter;
-mod message;
 mod settings;
+mod test;
 mod tray;
 mod util;
-mod window_blocker;
 mod window_counter;
 mod window_main;
 
-use std::sync::Arc;
-use std::sync::mpsc::channel;
-
 use tauri::Manager;
 
-use crate::blocker::Blocker;
-use crate::counter::Counter;
-
-use crate::message::Message;
 use crate::settings::{setup_settings, tauri_load_settings};
 use crate::tray::setup_tray;
+use crate::window_counter::start_counter_app;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -44,15 +36,8 @@ pub fn run() {
     .setup(|app| {
       setup_tray(app);
       let settings = setup_settings(app);
-      let counter = Counter::new_state(settings.work_secs);
-      let blocker = Blocker::new_state(settings.rest_secs);
-      app.manage(counter.clone());
-      app.manage(blocker.clone());
 
-      let (sx, rx) = channel::<Message>();
-      let sx = Arc::new(sx);
-      // counter.lock().unwrap().start(sx.clone());
-      blocker.lock().unwrap().start(sx.clone());
+      start_counter_app(&settings);
 
       // std::thread::spawn(move || {
       //   loop {

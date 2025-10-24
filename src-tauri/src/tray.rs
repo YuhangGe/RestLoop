@@ -4,7 +4,7 @@ use tauri::{
   tray::TrayIconBuilder,
 };
 
-use crate::{constant::APP_TITLE, counter::CounterState, window_main::open_main_window};
+use crate::{constant::APP_TITLE, window_main::open_main_window};
 
 const TRAY_MENU_QUIT: &'static str = "quit";
 const TRAY_MENU_RESET: &'static str = "reset";
@@ -36,20 +36,20 @@ pub fn setup_tray(app: &mut App) {
     // })
     .on_menu_event(move |app, event| match event.id.as_ref() {
       TRAY_MENU_QUIT => {
-        app.state::<CounterState>().lock().unwrap().close();
+        // app.state::<CounterState>().lock().unwrap().close();
         // app.exit(0);
       }
       TRAY_MENU_PAUSE => {
-        app.state::<CounterState>().lock().unwrap().pause();
+        // app.state::<CounterState>().lock().unwrap().pause();
       }
       TRAY_MENU_RESUME => {
-        app.state::<CounterState>().lock().unwrap().resume();
+        // app.state::<CounterState>().lock().unwrap().resume();
       }
       TRAY_MENU_SETTING => {
         open_main_window(app);
       }
       TRAY_MENU_RESET => {
-        app.state::<CounterState>().lock().unwrap().reset();
+        // app.state::<CounterState>().lock().unwrap().reset();
       }
       _ => {
         println!("menu item {:?} not handled", event.id);

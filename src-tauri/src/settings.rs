@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
-use tauri::{App, AppHandle, Manager, Runtime, State};
+use tauri::{App, AppHandle, Runtime, State};
 use tauri_plugin_store::StoreExt;
 
 use crate::constant::{STORE_DATA_PATH, STORE_SETTINGS_KEY};

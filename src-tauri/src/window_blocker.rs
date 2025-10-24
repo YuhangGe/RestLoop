@@ -1,7 +1,7 @@
 use std::sync::{
   Arc,
   atomic::{AtomicBool, AtomicU32},
-  mpsc::Receiver,
+  mpsc::{self, Receiver, Sender},
 };
 
 use display_info::DisplayInfo;
@@ -14,18 +14,14 @@ use winit::platform::windows::EventLoopBuilderExtWindows;
 
 use crate::{message::Message, util::pad};
 
-const COUNTER_WINDOW_WIDTH: f32 = 142f32;
-const COUNTER_WINDOW_HEIGHT: f32 = 70f32;
-const COUNTER_WINDOW_RADIUS: f32 = 24f32;
-const COUNTER_WINDOW_FONT_SIZE: f32 = 40f32;
-
-struct CounterApp {
+struct BlockerApp {
   scale: f32,
   close_signal: Arc<AtomicBool>,
+  mv_sx: Arc<Sender<bool>>,
   count_secs: Arc<AtomicU32>,
 }
 
-impl eframe::App for CounterApp {
+impl eframe::App for BlockerApp {
   fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
     [0.0, 0.0, 0.0, 0.0]
   }
@@ -36,27 +32,30 @@ impl eframe::App for CounterApp {
     }
 
     let count_secs = self.count_secs.load(std::sync::atomic::Ordering::Relaxed);
-    let minutes = pad(count_secs / 60);
-    let seconds = pad(count_secs % 60);
-    let display = format!("{}:{}", minutes, seconds);
 
-    let panel_frame = Frame::default()
-      .fill(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 60))
-      .corner_radius(COUNTER_WINDOW_RADIUS / self.scale);
+    let display = if count_secs <= 0 {
+      "休息结束，滑动鼠标解锁".to_string()
+    } else {
+      let minutes = pad(count_secs / 60);
+      let seconds = pad(count_secs % 60);
+      format!("正在休息中，{}:{} 后解锁", minutes, seconds)
+    };
+    let panel_frame = Frame::default().fill(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 120));
+    let mv_sx = self.mv_sx.clone();
 
     egui::CentralPanel::default()
       .frame(panel_frame)
       .show(ctx, move |ui| {
         ui.style_mut().interaction.selectable_labels = false;
-        let res = ui.interact(ui.max_rect(), Id::new(1), Sense::drag());
-        if res.dragged() {
-          ctx.send_viewport_cmd(ViewportCommand::StartDrag);
+        let res = ui.interact(ui.max_rect(), Id::new(1), Sense::click());
+        if res.clicked() {
+          mv_sx.send(true).unwrap();
         }
         ui.centered_and_justified(|ui| {
           ui.label(
             RichText::new(display)
               .monospace()
-              .size(COUNTER_WINDOW_FONT_SIZE / self.scale)
+              .size(32f32 / self.scale)
               .color(Color32::WHITE),
           );
         });
@@ -65,20 +64,13 @@ impl eframe::App for CounterApp {
     ctx.request_repaint();
   }
 }
-pub fn show_counter_window(count_secs: u32, rx: Receiver<Message>) {
+pub fn show_blocker_window(count_secs: u32, rx: Receiver<Message>, sx: Sender<()>) {
   let displays = DisplayInfo::all().unwrap();
   let primary_display = displays.iter().find(|d| d.is_primary).unwrap();
   let scale = primary_display.scale_factor;
   let screen_width = (primary_display.width as f32) / scale;
   let screen_height = (primary_display.height as f32) / scale;
-  let width = COUNTER_WINDOW_WIDTH / scale;
-  let height = COUNTER_WINDOW_HEIGHT / scale;
-  let bottom = 80f32 / scale;
-  let right = 30f32 / scale;
-  let pos = (
-    screen_width - width - right,
-    screen_height - bottom - height,
-  );
+
   // println!("POS: {:#?} {}", pos, primary_display.scale_factor);
   let options = eframe::NativeOptions {
     event_loop_builder: Some(Box::new(|_elb| {
@@ -87,20 +79,21 @@ pub fn show_counter_window(count_secs: u32, rx: Receiver<Message>) {
     })),
     viewport: ViewportBuilder::default()
       .with_icon(IconData::default())
-      .with_inner_size((width, height))
+      .with_inner_size((screen_width, screen_height))
       .with_always_on_top()
       .with_transparent(true)
-      .with_drag_and_drop(true)
       .with_decorations(false)
-      .with_position(pos)
+      .with_position((0.0, 0.0))
       .with_taskbar(false),
     ..Default::default()
   };
 
   let close_signal = Arc::new(AtomicBool::new(false));
+  let (mv_sx, mv_rx) = mpsc::channel();
   let count_secs = Arc::new(AtomicU32::new(count_secs));
-  let counter_app = Box::new(CounterApp {
+  let blocker_app = Box::new(BlockerApp {
     scale,
+    mv_sx: Arc::new(mv_sx),
     close_signal: close_signal.clone(),
     count_secs: count_secs.clone(),
   });
@@ -117,10 +110,14 @@ pub fn show_counter_window(count_secs: u32, rx: Receiver<Message>) {
       }
     }
   });
+  std::thread::spawn(move || {
+    let _ = mv_rx.recv().unwrap();
+    sx.send(()).unwrap();
+  });
   eframe::run_native(
-    "RestLoop - 工作计时器",
+    "RestLoop - 休息熄屏器",
     options,
-    Box::new(move |_| Ok(counter_app)),
+    Box::new(move |_| Ok(blocker_app)),
   )
   .unwrap();
 }

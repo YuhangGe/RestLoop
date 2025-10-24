@@ -1,17 +1,23 @@
+mod blocker;
 mod constant;
 mod counter;
+mod message;
 mod settings;
 mod tray;
+mod util;
+mod window_blocker;
 mod window_counter;
 mod window_main;
-mod x;
+
+use std::sync::Arc;
+use std::sync::mpsc::channel;
 
 use tauri::Manager;
-use tauri::plugin::Builder;
-use tokio::sync;
-use winit::raw_window_handle::HasDisplayHandle;
 
+use crate::blocker::Blocker;
 use crate::counter::Counter;
+
+use crate::message::Message;
 use crate::settings::{setup_settings, tauri_load_settings};
 use crate::tray::setup_tray;
 
@@ -24,7 +30,6 @@ pub fn run() {
       tauri_plugin_autostart::MacosLauncher::LaunchAgent,
       None,
     ))
-    .plugin()
     .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
       // let win = app.get_webview_window("main").expect("no main window");
       // win.show().unwrap();
@@ -40,19 +45,30 @@ pub fn run() {
       setup_tray(app);
       let settings = setup_settings(app);
       let counter = Counter::new_state(settings.work_secs);
+      let blocker = Blocker::new_state(settings.rest_secs);
       app.manage(counter.clone());
+      app.manage(blocker.clone());
 
-      tauri::async_runtime::spawn(async move {
-        // counter.lock().await.start().await;
-      });
-      let x = tauri::window::WindowBuilder::new(app, "xxx")
-        .title("xxx")
-        .build()
-        .unwrap();
+      let (sx, rx) = channel::<Message>();
+      let sx = Arc::new(sx);
+      // counter.lock().unwrap().start(sx.clone());
+      blocker.lock().unwrap().start(sx.clone());
 
-      x.show().unwrap();
-
-      let h = x.display_handle().unwrap();
+      // std::thread::spawn(move || {
+      //   loop {
+      //     match rx.recv() {
+      //       Ok(Message::CounterEnd) => {
+      //         counter.lock().unwrap().close();
+      //         blocker.lock().unwrap().start(sx.clone());
+      //       }
+      //       Ok(Message::BlockerEnd) => {
+      //         blocker.lock().unwrap().close();
+      //         counter.lock().unwrap().start(sx.clone());
+      //       }
+      //       _ => (),
+      //     }
+      //   }
+      // });
 
       Ok(())
     })

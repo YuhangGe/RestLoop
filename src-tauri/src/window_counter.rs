@@ -5,7 +5,7 @@ use std::{
 
 use display_info::DisplayInfo;
 use eframe::egui::{
-  CentralPanel, Color32, Frame, IconData, Id, Pos2, RichText, Sense, Vec2, ViewportBuilder,
+  CentralPanel, Color32, Frame, IconData, Id, Key, Pos2, RichText, Sense, Vec2, ViewportBuilder,
   ViewportCommand, ViewportId, Visuals,
 };
 
@@ -38,12 +38,15 @@ pub type CounterEventSignal = Arc<AtomicU8>;
 struct CounterApp {
   work_secs: u32,
   rest_secs: u32,
+  escape_count: u32,
   count_start_time: u64,
   count_paused_time: Option<u64>,
   state: State,
   display: CounterDisplay,
   second_display: Option<CounterDisplay2>,
   event_signal: Arc<AtomicU8>,
+  mouse_pos: (u32, u32),
+  escape_pressed_count: u32,
 }
 
 struct CounterDisplay {
@@ -58,8 +61,6 @@ struct CounterDisplay2 {
   scale: f32,
   screen_rect: ((f32, f32), (f32, f32)),
 }
-
-const REST_END_TIP: &'static str = "休息结束，移动鼠标解锁";
 
 fn fmt_count(minutes: u32, seconds: u32) -> String {
   format!("休息中，{:02}:{:02} 后解锁", minutes, seconds)
@@ -100,10 +101,13 @@ impl CounterApp {
       second_display: None,
       work_secs: settings.work_secs,
       rest_secs: settings.rest_secs,
+      escape_count: settings.escape_count,
       state: State::Counting,
       count_start_time: now(),
       count_paused_time: None,
       event_signal,
+      mouse_pos: (0, 0),
+      escape_pressed_count: 0,
     }
   }
   fn place_window(&self, ctx: &eframe::egui::Context, pos: Pos2, size: Vec2) {
@@ -139,7 +143,7 @@ impl CounterApp {
         self.place_window(ctx, (0f32, 0f32).into(), self.display.screen_size.into());
         self.state = State::Blocking;
         self.count_start_time = now();
-
+        self.escape_pressed_count = 0;
         let second_display = DisplayInfo::all()
           .unwrap_or_default()
           .iter()
@@ -175,9 +179,29 @@ impl CounterApp {
       }
       EVENT_BLOCKING_END => {
         self.state = State::BlockEnd;
+        self.mouse_pos = ctx
+          .pointer_latest_pos()
+          .map(|p| (p.x as u32, p.y as u32))
+          .unwrap_or_default();
         false
       }
       _ => false,
+    }
+  }
+
+  /// 处理紧急退出逻辑
+  fn handle_escape(&mut self, ctx: &eframe::egui::Context, state: State) {
+    if matches!(state, State::Blocking) {
+      ctx.input(|r| {
+        if r.key_pressed(Key::Escape) {
+          self.escape_pressed_count += 1;
+          if self.escape_pressed_count >= self.escape_count {
+            self
+              .event_signal
+              .store(EVENT_ENTER_COUNTING, std::sync::atomic::Ordering::Relaxed);
+          }
+        }
+      });
     }
   }
 }
@@ -206,11 +230,11 @@ impl eframe::App for CounterApp {
     }
 
     let state = self.state;
-    let mut blocking_left_secs: u32 = 0xffff;
+    let mut blocking_left_secs: u32 = 0;
     CentralPanel::default().frame(panel_frame).show(ctx, |ui| {
       ui.style_mut().interaction.selectable_labels = false;
 
-      let display = match state {
+      match state {
         State::Counting => {
           let res = ui.interact(ui.max_rect(), Id::new(1), Sense::drag());
           if res.dragged() {
@@ -228,35 +252,80 @@ impl eframe::App for CounterApp {
               .store(EVENT_ENTER_BLOCKING, std::sync::atomic::Ordering::Relaxed);
           }
 
-          format!("{:02}:{:02}", minutes, seconds)
+          ui.centered_and_justified(|ui| {
+            ui.label(
+              RichText::new(format!("{:02}:{:02}", minutes, seconds))
+                .monospace()
+                .size(COUNTER_WINDOW_FONT_SIZE / self.display.scale)
+                .color(Color32::WHITE),
+            );
+          });
         }
         State::Blocking => {
-          let passed_secs = (now() - self.count_start_time) as u32;
-          let left_secs = self.rest_secs - passed_secs;
-          let minutes = left_secs / 60;
-          let seconds = left_secs % 60;
-          if left_secs <= 0 {
-            self
-              .event_signal
-              .store(EVENT_BLOCKING_END, std::sync::atomic::Ordering::Relaxed);
-          } else {
-            blocking_left_secs = left_secs;
-          }
-          fmt_count(minutes, seconds)
+          ui.vertical_centered(|ui| {
+            let passed_secs = (now() - self.count_start_time) as u32;
+            let left_secs = self.rest_secs - passed_secs;
+            let minutes = left_secs / 60;
+            let seconds = left_secs % 60;
+            if left_secs <= 0 {
+              self
+                .event_signal
+                .store(EVENT_BLOCKING_END, std::sync::atomic::Ordering::Relaxed);
+            } else {
+              blocking_left_secs = left_secs;
+            }
+            let screen_height = self.display.screen_size.1;
+            let fsize1 = COUNTER_WINDOW_FONT_SIZE / self.display.scale;
+            let fsize2 = fsize1 * 0.86;
+            let show_escape = self.escape_pressed_count > (self.escape_count >> 1);
+            ui.add_space(
+              (screen_height - fsize1 - if show_escape { fsize2 + 12.0 } else { 0.0 }) / 2.0,
+            );
+            ui.label(
+              RichText::new(fmt_count(minutes, seconds))
+                .monospace()
+                .size(fsize1)
+                .color(Color32::WHITE),
+            );
+            if show_escape {
+              ui.add_space(12.0);
+              ui.label(
+                RichText::new("即将紧急退出")
+                  .size(fsize2)
+                  .color(Color32::RED),
+              );
+            }
+          });
         }
         State::BlockEnd => {
-          let res = ui.interact(ui.max_rect(), Id::new(2), Sense::click());
-          if res.clicked() {
+          let pos = ctx
+            .pointer_latest_pos()
+            .map(|p| (p.x as u32, p.y as u32))
+            .unwrap_or_default();
+
+          if self.mouse_pos.0.abs_diff(pos.0) > 10
+            || self.mouse_pos.1.abs_diff(pos.1) > 10
+            || ui
+              .interact(ui.max_rect(), Id::new(2), Sense::click())
+              .clicked()
+          {
             self
               .event_signal
               .store(EVENT_ENTER_COUNTING, std::sync::atomic::Ordering::Relaxed);
           }
-          blocking_left_secs = 0;
-          REST_END_TIP.to_string()
+          ui.centered_and_justified(|ui| {
+            ui.label(
+              RichText::new("休息结束，移动鼠标解锁~")
+                .monospace()
+                .size(COUNTER_WINDOW_FONT_SIZE / self.display.scale)
+                .color(Color32::WHITE),
+            );
+          });
         }
       };
 
-      if blocking_left_secs < 0xffff {
+      // 渲染第二个屏幕
+      if !matches!(state, State::Counting) {
         if let Some(sd) = self.second_display.as_ref() {
           ctx.show_viewport_immediate(
             ViewportId::from_hash_of("second-blocker"),
@@ -272,10 +341,16 @@ impl eframe::App for CounterApp {
             |ctx, _class| {
               let panel_frame =
                 Frame::default().fill(Color32::from_rgba_unmultiplied_const(0, 0, 0, 10));
-
+              let event_signal = self.event_signal.clone();
               CentralPanel::default().frame(panel_frame).show(ctx, |ui| {
                 ui.style_mut().interaction.selectable_labels = false;
-
+                if blocking_left_secs == 0
+                  && ui
+                    .interact(ui.max_rect(), Id::new(2), Sense::click())
+                    .clicked()
+                {
+                  event_signal.store(EVENT_ENTER_COUNTING, std::sync::atomic::Ordering::Relaxed);
+                }
                 ui.centered_and_justified(|ui| {
                   ui.label(
                     RichText::new(if blocking_left_secs > 0 {
@@ -283,7 +358,7 @@ impl eframe::App for CounterApp {
                       let seconds = blocking_left_secs % 60;
                       fmt_count(minutes, seconds)
                     } else {
-                      REST_END_TIP.to_string()
+                      "休息结束，点击鼠标解锁~".to_string()
                     })
                     .monospace()
                     .size(COUNTER_WINDOW_FONT_SIZE / sd.scale)
@@ -295,15 +370,10 @@ impl eframe::App for CounterApp {
           )
         }
       }
-      ui.centered_and_justified(|ui| {
-        ui.label(
-          RichText::new(display)
-            .monospace()
-            .size(COUNTER_WINDOW_FONT_SIZE / self.display.scale)
-            .color(Color32::WHITE),
-        );
-      });
     });
+
+    // 处理紧急退出逻辑
+    self.handle_escape(ctx, state);
 
     if matches!(state, State::Counting | State::Blocking) {
       ctx.request_repaint_after_secs(0.5);

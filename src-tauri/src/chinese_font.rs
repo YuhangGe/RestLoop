@@ -22,7 +22,7 @@ use eframe::egui::{Context, FontData, FontDefinitions, FontFamily};
 #[derive(Debug)]
 pub enum FontError {
   /// Font file not found
-  NotFound(String),
+  NotFound(()),
   // /// Failed to read font file
   // ReadError(std::io::Error),
   // /// Platform not supported
@@ -127,7 +127,8 @@ fn load_windows_chinese_font() -> Result<FontData, FontError> {
   }
 
   Err(FontError::NotFound(
-    "No Chinese font found on Windows".to_string(),
+    // "No Chinese font found on Windows".to_string(),
+    (),
   ))
 }
 

@@ -4,7 +4,13 @@ use tauri::{
   tray::TrayIconBuilder,
 };
 
-use crate::{constant::APP_TITLE, window_main::open_main_window};
+use crate::{
+  constant::APP_TITLE,
+  window_counter::{
+    CounterEventSignal, EVENT_PAUSE_COUNTING, EVENT_RESET_COUNTING, EVENT_RESUME_COUNTING,
+  },
+  window_main::open_main_window,
+};
 
 const TRAY_MENU_QUIT: &'static str = "quit";
 const TRAY_MENU_RESET: &'static str = "reset";
@@ -36,20 +42,25 @@ pub fn setup_tray(app: &mut App) {
     // })
     .on_menu_event(move |app, event| match event.id.as_ref() {
       TRAY_MENU_QUIT => {
-        // app.state::<CounterState>().lock().unwrap().close();
-        // app.exit(0);
+        app.exit(0);
       }
       TRAY_MENU_PAUSE => {
-        // app.state::<CounterState>().lock().unwrap().pause();
+        app
+          .state::<CounterEventSignal>()
+          .store(EVENT_PAUSE_COUNTING, std::sync::atomic::Ordering::Relaxed);
       }
       TRAY_MENU_RESUME => {
-        // app.state::<CounterState>().lock().unwrap().resume();
+        app
+          .state::<CounterEventSignal>()
+          .store(EVENT_RESUME_COUNTING, std::sync::atomic::Ordering::Relaxed);
       }
       TRAY_MENU_SETTING => {
         open_main_window(app);
       }
       TRAY_MENU_RESET => {
-        // app.state::<CounterState>().lock().unwrap().reset();
+        app
+          .state::<CounterEventSignal>()
+          .store(EVENT_RESET_COUNTING, std::sync::atomic::Ordering::Relaxed);
       }
       _ => {
         println!("menu item {:?} not handled", event.id);

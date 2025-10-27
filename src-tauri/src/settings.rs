@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{App, AppHandle, Runtime, State};
+use tauri::{App, AppHandle, Runtime};
 use tauri_plugin_store::StoreExt;
 
 use crate::constant::{STORE_DATA_PATH, STORE_SETTINGS_KEY};
@@ -23,10 +23,6 @@ impl Default for Settings {
   }
 }
 
-impl Settings {
-  pub fn save(&self) {}
-}
-
 pub fn setup_settings(app: &mut App) -> Settings {
   let store = app.store(STORE_DATA_PATH).unwrap();
 
@@ -43,10 +39,15 @@ pub fn setup_settings(app: &mut App) -> Settings {
 }
 
 #[tauri::command]
-pub async fn tauri_load_settings<R: Runtime>(
-  _app: AppHandle<R>,
-  state: State<'_, Settings>,
-) -> Result<Settings, String> {
-  let x = state.inner().clone();
-  Ok(x)
+pub async fn tauri_refresh_settings<R: Runtime>(app: AppHandle<R>) -> Result<bool, String> {
+  let store = app.store(STORE_DATA_PATH).unwrap();
+  let Some(settings) = store.get(STORE_SETTINGS_KEY) else {
+    return Ok(false);
+  };
+
+  let Ok(settings) = serde_json::from_value::<Settings>(settings) else {
+    return Ok(false);
+  };
+
+  Ok(true)
 }

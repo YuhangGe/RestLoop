@@ -1,15 +1,16 @@
 mod chinese_font;
 mod constant;
 mod settings;
-mod test;
 mod tray;
-mod util;
 mod window_counter;
 mod window_main;
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicU8;
+
 use tauri::Manager;
 
-use crate::settings::{setup_settings, tauri_load_settings};
+use crate::settings::{setup_settings, tauri_refresh_settings};
 use crate::tray::setup_tray;
 use crate::window_counter::start_counter_app;
 
@@ -32,28 +33,14 @@ pub fn run() {
       let _ = win.show();
       let _ = win.set_focus();
     }))
-    .invoke_handler(tauri::generate_handler![tauri_load_settings])
+    .invoke_handler(tauri::generate_handler![tauri_refresh_settings])
     .setup(|app| {
       setup_tray(app);
       let settings = setup_settings(app);
+      let event_signal = Arc::new(AtomicU8::new(0));
+      app.manage(event_signal.clone());
 
-      start_counter_app(&settings);
-
-      // std::thread::spawn(move || {
-      //   loop {
-      //     match rx.recv() {
-      //       Ok(Message::CounterEnd) => {
-      //         counter.lock().unwrap().close();
-      //         blocker.lock().unwrap().start(sx.clone());
-      //       }
-      //       Ok(Message::BlockerEnd) => {
-      //         blocker.lock().unwrap().close();
-      //         counter.lock().unwrap().start(sx.clone());
-      //       }
-      //       _ => (),
-      //     }
-      //   }
-      // });
+      start_counter_app(&settings, event_signal);
 
       Ok(())
     })

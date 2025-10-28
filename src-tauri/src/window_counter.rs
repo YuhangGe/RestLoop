@@ -12,7 +12,7 @@ use eframe::egui::{
 #[cfg(windows)]
 use winit::platform::windows::EventLoopBuilderExtWindows;
 
-use crate::{chinese_font::setup_chinese_fonts, settings::Settings};
+use crate::{chinese_font::setup_fonts, settings::Settings};
 
 const COUNTER_WINDOW_WIDTH: f32 = 142f32;
 const COUNTER_WINDOW_HEIGHT: f32 = 70f32;
@@ -411,7 +411,7 @@ pub fn start_counter_app(settings: &Settings, event_signal: Arc<AtomicU8>) {
       "RestLoop - 工作计时器",
       options,
       Box::new(move |cc| {
-        setup_chinese_fonts(&cc.egui_ctx).unwrap();
+        setup_fonts(&cc.egui_ctx);
         Ok(counter_app)
       }),
     )
